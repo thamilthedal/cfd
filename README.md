@@ -1,5 +1,5 @@
 # CFD
-Modules that help with the workflow for research
+Modules that help with the workflow for my research
 
 ## foamFluentMeshToFluent2D.py
 
