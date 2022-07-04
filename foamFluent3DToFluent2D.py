@@ -5,6 +5,7 @@ Created on Fri Jul  1 10:21:14 2022
 @author: thamilmani
 """
 import numpy as np
+import pandas as pd
 
 
 def foamFluent3DToFluent2D(inputFilename, outputFilename, nBoundaries, Z=0):
@@ -28,40 +29,35 @@ def foamFluent3DToFluent2D(inputFilename, outputFilename, nBoundaries, Z=0):
 
     """
     # Data Retrieval
+    
+    # Reading Points Data
     with open(inputFilename) as f:
         header = []
         for i in range(12):
             header.append(f.readline())
-
-    header[10]
-
     pointSkip = 12
-
     nPoints = int(header[-2].split()[3], 16)
-
-    pointsData = np.genfromtxt(
+    pointsData = pd.DataFrame(np.genfromtxt(
         inputFilename,
         skip_header=pointSkip,
         max_rows=nPoints,
-    )
+    ))
 
+    # Reading Face Data
     with open(inputFilename) as f:
         faceHeader = f.readlines()[pointSkip + nPoints + 2]
-
     faceSkip = pointSkip + nPoints + 4
-
     nFaces = int(faceHeader.split()[3], 16)
-
     nAllFaces = nFaces
-
-    faceData = np.genfromtxt(
+    faceData = pd.DataFrame(np.genfromtxt(
         inputFilename,
         skip_header=faceSkip,
         max_rows=nFaces,
         dtype="int32",
         converters={_: lambda s: int(s, 16) for _ in range(7)},
-    )
+    ))
 
+    # Reading Boundary Data
     boundarySkip = faceSkip + nFaces + 3
     headerSkip = faceSkip + nFaces + 1
     boundaryData = []
@@ -69,132 +65,176 @@ def foamFluent3DToFluent2D(inputFilename, outputFilename, nBoundaries, Z=0):
     for n in range(nBoundaries):
         with open(inputFilename) as f:
             boundaryHeader[n] = f.readlines()[headerSkip]
-
         nBoundaryFaces = (
-            int(boundaryHeader[n].split()[3], 16) - int(boundaryHeader[n].split()[2], 16)
+            int(boundaryHeader[n].split()[3], 16) -
+            int(boundaryHeader[n].split()[2], 16)
         ) + 1
-
         boundaryData.append(
-            np.genfromtxt(
+            pd.DataFrame(np.genfromtxt(
                 inputFilename,
                 skip_header=boundarySkip,
                 max_rows=nBoundaryFaces,
                 dtype="int32",
                 converters={_: lambda s: int(s, 16) for _ in range(7)},
-            )
+            ))
         )
         headerSkip += nBoundaryFaces + 3
         boundarySkip += nBoundaryFaces + 3
         nAllFaces += nBoundaryFaces
 
+    # Reading Node Header
     nodeSkip = boundarySkip + 1 + (int(header[-4].split()[3], 16) - nAllFaces)
     with open(inputFilename) as f:
         nodeHeader = f.readlines()[nodeSkip]
 
-    # Getting Footer
+    # Reading Footer
     footerSkip = nodeSkip + 2
     footer = []
     with open(inputFilename) as f:
         for line in f.readlines()[footerSkip:-1]:
             footer.append(line)
+    print("I am done Data retrieval!\n\n")
+    
+    # Calculating Changes in Points Data
+    pAOld = []
+    pANew = []
+    count = 0
+    for i in range(nPoints):
+        if pointsData[2][i] == Z:
+            pAOld.append(i)
+            pANew.append(count)
+        else:
+            continue
+        count += 1
+    print("Got Point Allocation Data\n")
+    
+    # Editing Face Data for 2D
+    del faceData[0]
+    for i in range(1, 5):
+        faceData[i] = faceData.apply(
+            lambda x: pANew[pAOld.index(x[i])] if(x[i] in pAOld) else "T", axis=1)
+    print("Edited Face Data\n")
+    
+    # Editing Boundary Face Data for 2D
+    for n in range(nBoundaries):
+        del boundaryData[n][0]
+        for i in range(1, 5):
+            print(i)
+            boundaryData[n][i] = boundaryData[n].apply(
+                lambda x: pANew[pAOld.index(x[i])] if(x[i] in pAOld) else "T", axis=1)
+        print("Edited Boundary Data {}\n".format(n))
+    
+    # Calculating updated Face Data Index
+    faceIndex = []
+    for i, j in enumerate(np.array(faceData)):
+        faceIndex.append(np.where(j[0:4] == 'T')[0])
+        faceIndex[i] = {0, 1, 2, 3} - set(faceIndex[i])
+    
+    # Calculating updated Boundary Face Data Index
+    boundaryFaceIndex = [0]*nBoundaries
+    for n in range(nBoundaries):
+        boundaryFaceIndex[n] = []
+        for i, j in enumerate(np.array(boundaryData[n])):
+            boundaryFaceIndex[n].append(np.where(j[0:4] == 'T')[0])
+            boundaryFaceIndex[n][i] = {0, 1, 2, 3} - set(boundaryFaceIndex[n][i])
 
-    # Data Writing
+    # Data Writing Begins
     with open(outputFilename, "w") as g:
 
         # Writing Header with changes to 2D
+        print("Writing Header...\n")
         a = '(0 "FOAM to 2D Fluent Mesh File") \n \n'
         g.write(a)
         g.write(header[2])
         g.write("(2 2) \n \n")
-
         y = str(hex(int(nPoints / 2))).replace("0x", "")
         x = header[6].replace(header[6].split()[3], y, 1)
-
         g.write(x.replace("3", "2", 1))
         x = header[-2].replace(header[-2].split()[3], y, 1)
-
         g.write(x.replace("3", "2", 1))
-
         g.write("( \n")
 
         # Writing Points into the mesh
+        print("Writing Points...\n")
+        pointsCount = 0
+        pointAllocateOld = []
+        pointAllocateNew = []
+        pointMisMatch = 0
+        pointMatch = 0
         for i in range(int(nPoints)):
-            if pointsData[i, 2] == Z:
-                c = "\t {} {}\n".format(pointsData[i, 0], pointsData[i, 1])
+            if pointsData[2][i] == Z:
+                c = "\t {} {}\n".format(pointsData[0][i], pointsData[1][i])
+                pointAllocateOld.append(i)
+                pointAllocateNew.append(pointsCount)
+                if i != pointsCount:
+                    pointMisMatch += 1
+                else:
+                    pointMatch += 1
+                pointsCount += 1
                 g.write(c)
         g.write(")) \n")
-
+        
+        # Writing Face Header
         y = str(hex(nAllFaces)).replace("0x", "")
         z = header[-4].replace(header[-4].split()[3], y)
         g.write(z)
         a = '(0 "Interior Faces") \n \n'
         g.write(a)
-        # Writing Face Header
         g.write(faceHeader.replace("0", "2", 1))
         g.write("( \n")
 
         # Writing Internal Faces into the mesh
-
-        # Face IDs for conversion
-        faceDataCount = []
+        print("Writing Internal Faces \n")
+        # Face IDs for 2D conversion
         for i in range(nFaces):
-            count = 0
-            ID = []
-            for j in range(1, 5):
-                if faceData[i, j] > nPoints / 2:
-                    continue
-                else:
-                    ID.append(j)
-            if ID == [1, 4]:
-                [A, B] = ID
+            ID = list(faceIndex[i])
+            if ID == [0, 3]:
+                [x, y] = ID
             else:
-                [B, A] = ID
-            P = str(hex(faceData[i, A])).replace("0x", "")
-            Q = str(hex(faceData[i, B])).replace("0x", "")
-            R = str(hex(faceData[i, 5])).replace("0x", "")
-            S = str(hex(faceData[i, 6])).replace("0x", "")
+                [y, x] = ID
+            Value = np.array(faceData)[i]
+            P = str(hex(Value[x])).replace("0x", "")
+            Q = str(hex(Value[y])).replace("0x", "")
+            R = str(hex(Value[4])).replace("0x", "")
+            S = str(hex(Value[5])).replace("0x", "")
             c = "\t {} {} {} {}\n".format(P, Q, R, S)
             g.write(c)
         g.write(")) \n")
 
         # Writing Boundary Faces into the mesh
         for n in range(nBoundaries):
-
+            print("Writing Boundary number {} ...\n".format(n + 1))
             # Writing Boundary Face Header
             g.write(boundaryHeader[n].replace("0", "2", 1))
             g.write("( \n")
-            # Writing Boundary Faces into the mesh
-
-            # Boundary Face IDs for conversion
+            # Boundary Face IDs for 2D conversion
             for i in range(nBoundaryFaces):
-                ID = []
-                for j in range(1, 5):
-                    if boundaryData[n][i, j] > nPoints / 2:
-                        continue
-                    else:
-                        ID.append(j)
-                if ID == [1, 4]:
-                    [A, B] = ID
+                ID = list(boundaryFaceIndex[n][i])
+                if ID == [0, 3]:
+                    [x, y] = ID
                 else:
-                    [B, A] = ID
-                P = str(hex(boundaryData[n][i, A])).replace("0x", "")
-                Q = str(hex(boundaryData[n][i, B])).replace("0x", "")
-                R = str(hex(boundaryData[n][i, 5])).replace("0x", "")
-                S = str(hex(boundaryData[n][i, 6])).replace("0x", "")
+                    [y, x] = ID
+                Value = np.array(boundaryData[n])[i]
+                P = str(hex(Value[x])).replace("0x", "")
+                Q = str(hex(Value[y])).replace("0x", "")
+                R = str(hex(Value[4])).replace("0x", "")
+                S = str(hex(Value[5])).replace("0x", "")
                 c = "\t {} {} {} {}\n".format(P, Q, R, S)
                 g.write(c)
             g.write(")) \n")
-
+        
+        # Writing Node Header
         g.write(header[7])
-
         string = nodeHeader.replace("0", "3", 1)
         index = string.rfind("(")
         new_character = ")"
         nodeHeader = string[:index] + new_character + string[index + 1 :]
         g.write(nodeHeader)
+        
+        # Writing Footer
+        print("Writing Footer...\n")
         for s in footer:
             g.write(s)
-
 
 if __name__ == "__main__":
 
