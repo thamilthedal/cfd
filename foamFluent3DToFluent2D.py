@@ -98,10 +98,10 @@ def foamFluent3DToFluent2D(inputFilename, outputFilename, nBoundaries, Z=0):
     # Calculating Changes in Points Data
     pAOld = []
     pANew = []
-    count = 0
+    count = 1
     for i in range(nPoints):
         if pointsData[2][i] == Z:
-            pAOld.append(i)
+            pAOld.append(i+1)
             pANew.append(count)
         else:
             continue
@@ -156,21 +156,9 @@ def foamFluent3DToFluent2D(inputFilename, outputFilename, nBoundaries, Z=0):
 
         # Writing Points into the mesh
         print("Writing Points...\n")
-        pointsCount = 0
-        pointAllocateOld = []
-        pointAllocateNew = []
-        pointMisMatch = 0
-        pointMatch = 0
         for i in range(int(nPoints)):
             if pointsData[2][i] == Z:
                 c = "\t {} {}\n".format(pointsData[0][i], pointsData[1][i])
-                pointAllocateOld.append(i)
-                pointAllocateNew.append(pointsCount)
-                if i != pointsCount:
-                    pointMisMatch += 1
-                else:
-                    pointMatch += 1
-                pointsCount += 1
                 g.write(c)
         g.write(")) \n")
         
