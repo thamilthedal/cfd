@@ -18,7 +18,7 @@ print("ID Obtained")
 
 print(ID[0])
 
-fileNames = get_filenames('B:/PhD/results/meshD/new', 'dat.h5')
+fileNames = get_filenames('src', 'dat.h5')
 for i in fileNames:
     g = h5py.File(i, 'r')
     #print_group(g)
