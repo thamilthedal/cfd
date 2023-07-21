@@ -2,6 +2,8 @@ import h5py
 import numpy as np
 from utils import print_group, extract_data, get_filenames
 
+# 3 D Data-extraction
+
 #print("\n\n\nCase File Structure")
 f = h5py.File('src/test.cas.h5', 'r')
 #print_group(f)
@@ -16,7 +18,6 @@ print("ID Obtained")
 
 print(ID[0])
 
-
 fileNames = get_filenames('B:/PhD/results/meshD/new', 'dat.h5')
 for i in fileNames:
     g = h5py.File(i, 'r')
@@ -24,5 +25,4 @@ for i in fileNames:
     [Cell_Variables, Cell_Data] = extract_data(g, 'cells')
     [Face_Variables, Face_Data] = extract_data(g, 'faces')
     print(i.split('/')[-1].split('.dat.h5')[0])
-    print(f"Max Wall Temperature: {max(Face_Data[12])}")
-
+    print(f"Max Temperature on Faces: {max(Face_Data[12])}")
