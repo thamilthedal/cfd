@@ -7,13 +7,15 @@ I have started working on this idea to develop a module that extracts both mesh 
 2. Extract Solution Variables from .dat.h5 file (both Cell-centered variables and Face-centered variables)
 3. Extract Node information, i.e., coordinates (X, Y, Z) of nodes, in both 2D and 3D meshes from .cas.h5 file.
 4. Compute face-centers for all faces based on the node information collected.
+5. Cell-center extraction completed. (@Runinho contributed for this through Stackoverflow.)
 
 ---
 
-> Stuck now extracting cell-center data efficiently, from the face centre information.
 
 ### What are the different modules more to do after obtaining cell-center data?
 - Once cell-center data is obtained, Data Extraction is complete.
+- Create a point, that stores Cell_ID for adjacent cells, and the variable at the point can be computed as an average of that adjacent cells.
+    - 2 adjacent cells for 1D, 4 for 2D and 6 for 3D
 - For line plots,
     - Create a query module and interpolating module to extract line information from the mesh.
     - Interpolation module that also interpolates necessary cell or face variables on that queried line
